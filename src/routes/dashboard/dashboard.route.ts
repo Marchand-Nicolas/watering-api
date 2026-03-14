@@ -221,6 +221,85 @@ router.post("/update_plant", async (req, res, next) => {
   }
 });
 
+router.delete("/delete_plant", async (req, res, next) => {
+  try {
+    if (!isValidToken(req.body?.token)) {
+      return res.status(401).json({ error: "Invalid token" });
+    }
+
+    const plantId = parsePositiveInteger(req.body?.plant_id);
+
+    if (plantId === null) {
+      return res.status(400).json({ error: "Invalid or missing plant_id" });
+    }
+
+    const [plantRows] = await dbPool.query<PlantIdRow[]>(
+      "SELECT id FROM plants WHERE id = ? LIMIT 1",
+      [plantId],
+    );
+
+    if (!plantRows[0]) {
+      return res.status(404).json({ error: "Plant not found" });
+    }
+
+    await dbPool.execute("DELETE FROM plants WHERE id = ?", [plantId]);
+
+    return res.status(200).json({ message: "Plant deleted", plant_id: plantId });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post("/add_order", async (req, res, next) => {
+  try {
+    if (!isValidToken(req.body?.token)) {
+      return res.status(401).json({ error: "Invalid token" });
+    }
+
+    const plantId = parsePositiveInteger(req.body?.plant_id);
+
+    if (plantId === null) {
+      return res.status(400).json({ error: "Invalid or missing plant_id" });
+    }
+
+    const [plantRows] = await dbPool.query<PlantRow[]>(
+      "SELECT id, watering_duration FROM plants WHERE id = ? LIMIT 1",
+      [plantId],
+    );
+
+    const plant = plantRows[0];
+
+    if (!plant) {
+      return res.status(404).json({ error: "Plant not found" });
+    }
+
+    const duration =
+      req.body?.duration === undefined
+        ? plant.watering_duration
+        : parsePositiveInteger(req.body.duration);
+
+    if (duration === null) {
+      return res.status(400).json({ error: "Invalid duration" });
+    }
+
+    const [result] = await dbPool.execute<ResultSetHeader>(
+      "INSERT INTO watering_orders (plant_id, date, duration) VALUES (?, NOW(), ?)",
+      [plantId, duration],
+    );
+
+    return res.status(201).json({
+      message: "Watering order created",
+      order: {
+        id: result.insertId,
+        plant_id: plantId,
+        duration,
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
 export const dashboardRoute: RouteModule = {
   path: "/dashboard",
   router,

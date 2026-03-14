@@ -12,11 +12,20 @@ interface PlantRow extends RowDataPacket {
   watering_frequency: number;
 }
 
-interface WateringLogRow extends RowDataPacket {
-  date: Date;
+interface WateringOrderRow extends RowDataPacket {
+  id: number;
+  duration: number;
+}
+
+interface WateringLogCountRow extends RowDataPacket {
+  count: number;
 }
 
 interface PlantIdRow extends RowDataPacket {
+  id: number;
+}
+
+interface WateringOrderIdRow extends RowDataPacket {
   id: number;
 }
 
@@ -78,27 +87,32 @@ router.get("/esp/is_watering_needed", async (req, res, next) => {
       });
     }
 
-    const [wateringLogRows] = await dbPool.query<WateringLogRow[]>(
-      "SELECT date FROM watering_logs WHERE plant_id = ? ORDER BY date DESC LIMIT 1",
+    const [orderRows] = await dbPool.query<WateringOrderRow[]>(
+      "SELECT id, duration FROM watering_orders WHERE plant_id = ? ORDER BY date DESC LIMIT 1",
       [plantId],
     );
 
-    const latestWateringLog = wateringLogRows[0];
+    const latestOrder = orderRows[0];
 
-    if (!latestWateringLog) {
+    if (!latestOrder) {
       return res.status(200).json({
-        watering_needed: true,
+        watering_needed: false,
         duration: plant.watering_duration,
       });
     }
 
-    const latestWateringDate = new Date(latestWateringLog.date);
-    const elapsedSeconds = (Date.now() - latestWateringDate.getTime()) / 1000;
-    const wateringNeeded = elapsedSeconds >= plant.watering_frequency;
+    const [logCountRows] = await dbPool.query<WateringLogCountRow[]>(
+      "SELECT COUNT(*) AS count FROM watering_logs WHERE order_id = ?",
+      [latestOrder.id],
+    );
+
+    const logCount = logCountRows[0]?.count ?? 0;
+    const wateringNeeded = logCount === 0;
 
     return res.status(200).json({
       watering_needed: wateringNeeded,
-      duration: plant.watering_duration,
+      duration: latestOrder.duration,
+      order_id: latestOrder.id,
     });
   } catch (error) {
     return next(error);
@@ -135,15 +149,23 @@ router.post("/esp/water_plant", async (req, res, next) => {
       return res.status(404).json({ error: "Plant not found" });
     }
 
+    const [latestOrderRows] = await dbPool.query<WateringOrderIdRow[]>(
+      "SELECT id FROM watering_orders WHERE plant_id = ? ORDER BY date DESC LIMIT 1",
+      [plantId],
+    );
+
+    const orderId = latestOrderRows[0]?.id ?? null;
+
     await dbPool.execute(
-      "INSERT INTO watering_logs (plant_id, date, status) VALUES (?, NOW(), ?)",
-      [plantId, status],
+      "INSERT INTO watering_logs (plant_id, date, status, order_id) VALUES (?, NOW(), ?, ?)",
+      [plantId, status, orderId],
     );
 
     return res.status(201).json({
       message: "Watering log recorded",
       plant_id: plantId,
       status,
+      order_id: orderId,
     });
   } catch (error) {
     return next(error);
