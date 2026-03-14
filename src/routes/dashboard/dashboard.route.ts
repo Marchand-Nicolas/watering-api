@@ -244,7 +244,9 @@ router.delete("/delete_plant", async (req, res, next) => {
 
     await dbPool.execute("DELETE FROM plants WHERE id = ?", [plantId]);
 
-    return res.status(200).json({ message: "Plant deleted", plant_id: plantId });
+    return res
+      .status(200)
+      .json({ message: "Plant deleted", plant_id: plantId });
   } catch (error) {
     return next(error);
   }
