@@ -1,0 +1,28 @@
+CREATE TABLE IF NOT EXISTS plants (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  watering_duration INT UNSIGNED NOT NULL,
+  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  watering_frequency INT UNSIGNED NOT NULL,
+  PRIMARY KEY (id)
+);
+
+CREATE TABLE IF NOT EXISTS watering_logs (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  plant_id INT UNSIGNED NOT NULL,
+  date DATETIME NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  PRIMARY KEY (id),
+  CONSTRAINT fk_watering_logs_plant_id
+    FOREIGN KEY (plant_id)
+    REFERENCES plants(id)
+    ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS calls (
+  plant_id INT UNSIGNED NOT NULL,
+  date DATETIME NOT NULL,
+  CONSTRAINT fk_calls_plant_id
+    FOREIGN KEY (plant_id)
+    REFERENCES plants(id)
+    ON DELETE CASCADE
+);

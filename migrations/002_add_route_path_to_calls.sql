@@ -1,0 +1,2 @@
+ALTER TABLE calls
+  ADD COLUMN route_path VARCHAR(255) NOT NULL DEFAULT '';
