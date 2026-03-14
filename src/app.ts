@@ -7,12 +7,18 @@ import { apiRouter } from "./routes";
 const app = express();
 
 app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "*");
+  const isLocalhostRequest =
+    req.hostname === "localhost" || req.hostname === "127.0.0.1";
+
+  if (isLocalhostRequest) {
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Headers", "*");
+  }
+
   res.header(
     "Access-Control-Allow-Methods",
     "GET,POST,PUT,PATCH,DELETE,OPTIONS",
   );
-  res.header("Access-Control-Allow-Headers", "*");
 
   if (req.method === "OPTIONS") {
     return res.sendStatus(204);
