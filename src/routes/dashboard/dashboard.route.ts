@@ -23,6 +23,8 @@ interface DashboardOrderRow extends RowDataPacket {
   date: Date;
   duration: number;
   status: string;
+  started_date: Date | null;
+  completed_date: Date | null;
 }
 
 const router = Router();
@@ -276,7 +278,13 @@ router.get("/orders", async (req, res, next) => {
     }
 
     const [rows] = await dbPool.query<DashboardOrderRow[]>(
-      `SELECT o.id, o.plant_id, o.date, o.duration, COALESCE(wl.status, 'pending') AS status
+      `SELECT o.id,
+              o.plant_id,
+              o.date,
+              o.duration,
+              COALESCE(wl.status, 'pending') AS status,
+              lifecycle.started_date,
+              lifecycle.completed_date
        FROM watering_orders o
        LEFT JOIN (
          SELECT order_id, MAX(id) AS latest_log_id
@@ -285,6 +293,14 @@ router.get("/orders", async (req, res, next) => {
          GROUP BY order_id
        ) latest_logs ON latest_logs.order_id = o.id
        LEFT JOIN watering_logs wl ON wl.id = latest_logs.latest_log_id
+       LEFT JOIN (
+         SELECT order_id,
+                MAX(CASE WHEN status = 'started' THEN date END) AS started_date,
+                MAX(CASE WHEN status = 'completed' THEN date END) AS completed_date
+         FROM watering_logs
+         WHERE order_id IS NOT NULL
+         GROUP BY order_id
+       ) lifecycle ON lifecycle.order_id = o.id
        ORDER BY o.date DESC, o.id DESC
        LIMIT 50`,
     );
@@ -296,6 +312,8 @@ router.get("/orders", async (req, res, next) => {
         date: order.date,
         duration: order.duration,
         status: order.status,
+        started_date: order.started_date,
+        completed_date: order.completed_date,
       })),
     });
   } catch (error) {
