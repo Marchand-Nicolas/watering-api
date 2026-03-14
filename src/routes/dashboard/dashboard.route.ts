@@ -10,10 +10,19 @@ interface PlantRow extends RowDataPacket {
   watering_duration: number;
   enabled: number;
   watering_frequency: number;
+  last_call: Date | null;
 }
 
 interface PlantIdRow extends RowDataPacket {
   id: number;
+}
+
+interface DashboardOrderRow extends RowDataPacket {
+  id: number;
+  plant_id: number;
+  date: Date;
+  duration: number;
+  status: string;
 }
 
 const router = Router();
@@ -55,7 +64,14 @@ router.get("/list_plants", async (_req, res, next) => {
     }
 
     const [rows] = await dbPool.query<PlantRow[]>(
-      "SELECT id, watering_duration, enabled, watering_frequency FROM plants ORDER BY id ASC",
+      `SELECT p.id, p.watering_duration, p.enabled, p.watering_frequency, latest_calls.last_call
+       FROM plants p
+       LEFT JOIN (
+         SELECT plant_id, MAX(date) AS last_call
+         FROM calls
+         GROUP BY plant_id
+       ) latest_calls ON latest_calls.plant_id = p.id
+       ORDER BY p.id ASC`,
     );
 
     return res.status(200).json({
@@ -64,6 +80,7 @@ router.get("/list_plants", async (_req, res, next) => {
         watering_duration: plant.watering_duration,
         enabled: Boolean(plant.enabled),
         watering_frequency: plant.watering_frequency,
+        last_call: plant.last_call,
       })),
     });
   } catch (error) {
@@ -247,6 +264,40 @@ router.delete("/delete_plant", async (req, res, next) => {
     return res
       .status(200)
       .json({ message: "Plant deleted", plant_id: plantId });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get("/orders", async (req, res, next) => {
+  try {
+    if (!isValidToken(req.query.token)) {
+      return res.status(401).json({ error: "Invalid token" });
+    }
+
+    const [rows] = await dbPool.query<DashboardOrderRow[]>(
+      `SELECT o.id, o.plant_id, o.date, o.duration, COALESCE(wl.status, 'pending') AS status
+       FROM watering_orders o
+       LEFT JOIN (
+         SELECT order_id, MAX(id) AS latest_log_id
+         FROM watering_logs
+         WHERE order_id IS NOT NULL
+         GROUP BY order_id
+       ) latest_logs ON latest_logs.order_id = o.id
+       LEFT JOIN watering_logs wl ON wl.id = latest_logs.latest_log_id
+       ORDER BY o.date DESC, o.id DESC
+       LIMIT 50`,
+    );
+
+    return res.status(200).json({
+      orders: rows.map((order) => ({
+        id: order.id,
+        plant_id: order.plant_id,
+        date: order.date,
+        duration: order.duration,
+        status: order.status,
+      })),
+    });
   } catch (error) {
     return next(error);
   }

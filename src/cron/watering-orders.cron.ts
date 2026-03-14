@@ -48,5 +48,5 @@ export const startWateringOrdersCron = (): void => {
     checkAndCreateWateringOrders().catch((err: unknown) => {
       console.error("[cron] Failed to create watering orders:", err);
     });
-  }, 60_000);
+  }, 10_000);
 };
