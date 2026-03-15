@@ -45,6 +45,18 @@ const isValidToken = (token: unknown): boolean => {
   return typeof token === "string" && token === env.deviceToken;
 };
 
+const isWithinFranceQuietHours = (date: Date = new Date()): boolean => {
+  const hourInFrance = Number(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Europe/Paris",
+      hour: "2-digit",
+      hour12: false,
+    }).format(date),
+  );
+
+  return hourInFrance >= 22 || hourInFrance < 9;
+};
+
 const logRouteCall = async (
   plantId: number,
   routePath: string,
@@ -81,6 +93,13 @@ router.get("/esp/is_watering_needed", async (req, res, next) => {
     }
 
     if (!plant.enabled) {
+      return res.status(200).json({
+        watering_needed: false,
+        duration: plant.watering_duration,
+      });
+    }
+
+    if (isWithinFranceQuietHours()) {
       return res.status(200).json({
         watering_needed: false,
         duration: plant.watering_duration,
