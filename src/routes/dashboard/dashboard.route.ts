@@ -17,6 +17,10 @@ interface PlantIdRow extends RowDataPacket {
   id: number;
 }
 
+interface OrderIdRow extends RowDataPacket {
+  id: number;
+}
+
 interface DashboardOrderRow extends RowDataPacket {
   id: number;
   plant_id: number;
@@ -368,6 +372,61 @@ router.post("/add_order", async (req, res, next) => {
     });
   } catch (error) {
     return next(error);
+  }
+});
+
+router.delete("/delete_order", async (req, res, next) => {
+  let connection;
+
+  try {
+    if (!isValidToken(req.body?.token)) {
+      return res.status(401).json({ error: "Invalid token" });
+    }
+
+    const orderId = parsePositiveInteger(req.body?.order_id);
+
+    if (orderId === null) {
+      return res.status(400).json({ error: "Invalid or missing order_id" });
+    }
+
+    connection = await dbPool.getConnection();
+    await connection.beginTransaction();
+
+    const [orderRows] = await connection.query<OrderIdRow[]>(
+      "SELECT id FROM watering_orders WHERE id = ? LIMIT 1",
+      [orderId],
+    );
+
+    if (!orderRows[0]) {
+      await connection.rollback();
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    const [deletedLogsResult] = await connection.execute<ResultSetHeader>(
+      "DELETE FROM watering_logs WHERE order_id = ?",
+      [orderId],
+    );
+
+    await connection.execute<ResultSetHeader>(
+      "DELETE FROM watering_orders WHERE id = ?",
+      [orderId],
+    );
+
+    await connection.commit();
+
+    return res.status(200).json({
+      message: "Watering order deleted",
+      order_id: orderId,
+      deleted_logs_count: deletedLogsResult.affectedRows,
+    });
+  } catch (error) {
+    if (connection) {
+      await connection.rollback();
+    }
+
+    return next(error);
+  } finally {
+    connection?.release();
   }
 });
 
